@@ -875,6 +875,7 @@
                 <div id="project-landing" style="display: none;">
                     <div class="tabs">
                         <button class="tab active" onclick="showProjectLanding()" id="project-tab">📁 Project Overview</button>
+                        <button class="tab" onclick="showDockerDeployment()" id="docker-tab">🐳 Docker Deployment</button>
                         <button class="tab" onclick="showScriptDetails()" id="script-tab">▶ Script Execution</button>
                     </div>
                     
@@ -915,6 +916,73 @@
                         <div class="file-list" id="project-file-list">
                             <h3 style="margin-bottom: 15px;">Project Files</h3>
                             <div id="project-files-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Docker Deployment Tab -->
+                <div id="docker-deployment" style="display: none;">
+                    <div class="tabs">
+                        <button class="tab" onclick="showProjectLanding()" id="project-tab-3">📁 Project Overview</button>
+                        <button class="tab active" onclick="showDockerDeployment()" id="docker-tab-2">🐳 Docker Deployment</button>
+                        <button class="tab" onclick="showScriptDetails()" id="script-tab-3">▶ Script Execution</button>
+                    </div>
+                    
+                    <div class="pipeline-execution-content">
+                        <div class="pipeline-header">
+                            <h2>🐳 Docker Container Deployment</h2>
+                            <div class="pipeline-actions">
+                                <button class="btn btn-secondary" onclick="checkDockerStatus()">Check Docker</button>
+                                <button class="btn btn-primary" onclick="loadDockerInstructions()">Load Instructions</button>
+                                <button class="btn btn-primary" onclick="buildDockerImage()" id="build-docker-btn">Build & Extract Package</button>
+                            </div>
+                        </div>
+
+                        <div id="docker-status" style="display: none; margin-bottom: 20px;">
+                            <div class="pipeline-info" id="docker-status-content"></div>
+                        </div>
+
+                        <div id="docker-instructions" style="display: none; margin-bottom: 20px;">
+                            <div class="pipeline-info">
+                                <h3>Build Instructions</h3>
+                                <div id="docker-instructions-content"></div>
+                            </div>
+                        </div>
+
+                        <div id="docker-build-output" style="display: none; margin-bottom: 20px;">
+                            <div class="pipeline-info">
+                                <h3>Build Output</h3>
+                                <div class="output-content" id="docker-build-output-content" style="max-height: 400px; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+
+                        <div id="docker-package-info" style="display: none; margin-bottom: 20px;">
+                            <div class="pipeline-info" style="border-left: 4px solid #28a745; background: #f0fff4;">
+                                <h3 style="color: #28a745; margin-top: 0;">✅ Lambda Package Extracted</h3>
+                                <div id="docker-package-details">
+                                    <div style="margin-bottom: 10px;">
+                                        <strong>Package Path:</strong>
+                                        <div style="font-family: 'Courier New', monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; word-break: break-all;" id="package-path"></div>
+                                    </div>
+                                    <div style="margin-bottom: 10px;">
+                                        <strong>Size:</strong> <span id="package-size"></span>
+                                    </div>
+                                    <div style="margin-bottom: 10px;">
+                                        <strong>Status:</strong> <span id="package-status" style="color: #28a745; font-weight: 600;">Ready for AWS Deployment</span>
+                                    </div>
+                                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                                        <button class="btn btn-primary" onclick="openPackageLocation()" id="open-package-btn">📁 Open Package Location</button>
+                                        <button class="btn btn-secondary" onclick="copyPackagePath()" id="copy-path-btn">📋 Copy Path</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-steps" id="docker-deployments-list">
+                            <h3 style="margin-bottom: 15px;">Active Deployments</h3>
+                            <div id="deployments-container">
+                                <p style="color: #666; font-style: italic;">No deployments yet. Load instructions and build an image to get started.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1103,21 +1171,64 @@
         function showProjectLanding() {
             document.getElementById('no-selection').style.display = 'none';
             document.getElementById('script-details').style.display = 'none';
+            document.getElementById('docker-deployment').style.display = 'none';
             document.getElementById('project-landing').style.display = 'block';
             
             // Update tab states
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.getElementById('project-tab')?.classList.add('active');
             document.getElementById('project-tab-2')?.classList.add('active');
+            document.getElementById('project-tab-3')?.classList.add('active');
+        }
+
+        function showDockerDeployment() {
+            if (!selectedProject) {
+                showError('Please select a project first.');
+                return;
+            }
+
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('script-details').style.display = 'none';
+            document.getElementById('project-landing').style.display = 'none';
+            document.getElementById('docker-deployment').style.display = 'block';
+            
+            // Update tab states
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById('docker-tab')?.classList.add('active');
+            document.getElementById('docker-tab-2')?.classList.add('active');
+            
+            // Check Docker status and load instructions
+            checkDockerStatus();
+            loadDockerInstructions();
+            loadDeployments();
         }
 
 
         function showScriptDetails() {
-            if (!selectedScript) return;
-            
+            // Allow showing script details even without a selected script (for viewing build output, etc.)
             document.getElementById('no-selection').style.display = 'none';
             document.getElementById('project-landing').style.display = 'none';
+            document.getElementById('docker-deployment').style.display = 'none';
             document.getElementById('script-details').style.display = 'block';
+            
+            if (!selectedScript) {
+                // Show placeholder when no script is selected
+                document.getElementById('script-name').textContent = 'Script Execution';
+                document.getElementById('script-path').textContent = 'Select a script from the sidebar to run it, or view build output from Docker deployments';
+                document.getElementById('script-args').parentElement.style.display = 'none';
+                document.getElementById('run-btn').style.display = 'none';
+                document.getElementById('debug-btn').style.display = 'none';
+                document.getElementById('output-content').textContent = 'Select a script from the sidebar to execute it.';
+                document.getElementById('output-content').className = 'output-content empty';
+                document.getElementById('script-arguments-info').style.display = 'none';
+                
+                // Update tab states
+                document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+                document.getElementById('script-tab')?.classList.add('active');
+                document.getElementById('script-tab-2')?.classList.add('active');
+                document.getElementById('script-tab-3')?.classList.add('active');
+                return;
+            }
             
             // Update script name and path
             document.getElementById('script-name').textContent = selectedScript.name;
@@ -1162,8 +1273,28 @@
                     
                     argsHtml += '</div>';
                     
+                    // Show examples if available
+                    if (info.examples && Array.isArray(info.examples) && info.examples.length > 0) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Examples:</h4>';
+                        argsHtml += '<div style="display: flex; flex-direction: column; gap: 5px;">';
+                        info.examples.forEach(example => {
+                            argsHtml += `<div style="padding: 8px; background: #f0f0f0; border-radius: 4px; font-family: \'Courier New\', monospace; font-size: 0.85em; color: #333;">${example}</div>`;
+                        });
+                        argsHtml += '</div>';
+                    }
+                    
+                    // Show notes if available
+                    if (info.notes && Array.isArray(info.notes) && info.notes.length > 0) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Notes:</h4>';
+                        argsHtml += '<ul style="margin: 0; padding-left: 20px; color: #666;">';
+                        info.notes.forEach(note => {
+                            argsHtml += `<li style="margin-bottom: 5px;">${note}</li>`;
+                        });
+                        argsHtml += '</ul>';
+                    }
+                    
                     // Show requirements if available
-                    if (info.requirements && info.requirements.length > 0) {
+                    if (info.requirements && Array.isArray(info.requirements) && info.requirements.length > 0) {
                         argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Requirements:</h4>';
                         argsHtml += '<ul style="margin: 0; padding-left: 20px; color: #666;">';
                         info.requirements.forEach(req => {
@@ -1176,6 +1307,16 @@
                     if (info.output) {
                         argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Output:</h4>';
                         argsHtml += `<p style="margin: 0; color: #666;">${info.output}</p>`;
+                    }
+                    
+                    // Show generates if available
+                    if (info.generates && Array.isArray(info.generates) && info.generates.length > 0) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Generates:</h4>';
+                        argsHtml += '<ul style="margin: 0; padding-left: 20px; color: #666;">';
+                        info.generates.forEach(gen => {
+                            argsHtml += `<li><code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px;">${gen}</code></li>`;
+                        });
+                        argsHtml += '</ul>';
                     }
                     
                     argsListDiv.innerHTML = argsHtml;
@@ -1302,10 +1443,8 @@
             document.getElementById('debug-btn').style.display = 'inline-block';
             
             document.getElementById('no-selection').style.display = 'none';
-            showScriptDetails();
-            // Update script name and path
-            document.getElementById('script-name').textContent = selectedScript.name;
-            document.getElementById('script-path').textContent = selectedScript.path;
+            
+            // Reset script execution state
             document.getElementById('script-args').value = '';
             document.getElementById('output-content').textContent = 'No output yet. Click "Run Script" to execute.';
             document.getElementById('output-content').className = 'output-content empty';
@@ -1313,70 +1452,8 @@
             document.getElementById('debug-btn').disabled = true;
             lastOutput = null;
             
-            // Display script arguments info if available
-            const argsInfoDiv = document.getElementById('script-arguments-info');
-            const descriptionDiv = document.getElementById('script-description');
-            const argsListDiv = document.getElementById('script-arguments-list');
-            
-            if (selectedScript.arguments_info) {
-                const info = selectedScript.arguments_info;
-                
-                // Show description
-                if (info.description) {
-                    descriptionDiv.innerHTML = `<p style="margin: 0; color: #555; line-height: 1.6;">${info.description}</p>`;
-                } else {
-                    descriptionDiv.innerHTML = '';
-                }
-                
-                // Show arguments
-                if (info.arguments && info.arguments.length > 0) {
-                    let argsHtml = '<h4 style="margin-top: 0; margin-bottom: 10px; color: #333;">Arguments:</h4>';
-                    argsHtml += '<div style="display: flex; flex-direction: column; gap: 10px;">';
-                    
-                    info.arguments.forEach(arg => {
-                        const requiredBadge = arg.required ? '<span style="background: #dc3545; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-left: 5px;">Required</span>' : '<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-left: 5px;">Optional</span>';
-                        const defaultText = arg.default ? ` <span style="color: #666; font-size: 0.9em;">(default: ${arg.default})</span>` : '';
-                        
-                        argsHtml += `
-                            <div style="padding: 10px; background: white; border-radius: 4px; border-left: 3px solid #667eea;">
-                                <div style="font-weight: 600; color: #333; margin-bottom: 5px;">
-                                    <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace;">${arg.name}</code>
-                                    ${requiredBadge}
-                                    ${defaultText}
-                                </div>
-                                <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">${arg.description || 'No description provided.'}</div>
-                                ${arg.example ? `<div style="color: #888; font-size: 0.85em; font-family: 'Courier New', monospace;">Example: ${arg.example}</div>` : ''}
-                            </div>
-                        `;
-                    });
-                    
-                    argsHtml += '</div>';
-                    
-                    // Show requirements if available
-                    if (info.requirements && info.requirements.length > 0) {
-                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Requirements:</h4>';
-                        argsHtml += '<ul style="margin: 0; padding-left: 20px; color: #666;">';
-                        info.requirements.forEach(req => {
-                            argsHtml += `<li>${req}</li>`;
-                        });
-                        argsHtml += '</ul>';
-                    }
-                    
-                    // Show output description if available
-                    if (info.output) {
-                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Output:</h4>';
-                        argsHtml += `<p style="margin: 0; color: #666;">${info.output}</p>`;
-                    }
-                    
-                    argsListDiv.innerHTML = argsHtml;
-                } else {
-                    argsListDiv.innerHTML = '<p style="color: #999; font-style: italic;">No arguments defined for this script.</p>';
-                }
-                
-                argsInfoDiv.style.display = 'block';
-            } else {
-                argsInfoDiv.style.display = 'none';
-            }
+            // Display script details (including arguments info)
+            showScriptDetails();
 
             // Update active state
             renderScriptList();
@@ -1699,8 +1776,357 @@
             }
         }
 
+        // Docker Deployment Functions
+        async function checkDockerStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/docker/check`);
+                const result = await response.json();
+                
+                const statusDiv = document.getElementById('docker-status');
+                const statusContent = document.getElementById('docker-status-content');
+                
+                if (result.success && result.available) {
+                    statusContent.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="color: #28a745; font-size: 1.5em;">✓</span>
+                            <div>
+                                <strong style="color: #28a745;">Docker is available</strong>
+                                <div style="color: #666; font-size: 0.9em;">${result.version || 'Docker installed'}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    statusContent.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="color: #dc3545; font-size: 1.5em;">✗</span>
+                            <div>
+                                <strong style="color: #dc3545;">Docker is not available</strong>
+                                <div style="color: #666; font-size: 0.9em;">${result.error || 'Please install Docker Desktop'}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                statusDiv.style.display = 'block';
+            } catch (error) {
+                showError('Error checking Docker status: ' + error.message);
+            }
+        }
+
+        async function loadDockerInstructions() {
+            if (!selectedProject) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(selectedProject.name)}/docker/instructions`);
+                const result = await response.json();
+                
+                const instructionsDiv = document.getElementById('docker-instructions');
+                const instructionsContent = document.getElementById('docker-instructions-content');
+                
+                if (result.success && result.instructions) {
+                    const config = result.parsed_config;
+                    let html = '<div style="margin-top: 15px;">';
+                    
+                    if (config.dockerfile_path) {
+                        html += `<p><strong>Dockerfile:</strong> <code>${config.dockerfile_path}</code></p>`;
+                    }
+                    if (config.docker_compose_path) {
+                        html += `<p><strong>Docker Compose:</strong> <code>${config.docker_compose_path}</code></p>`;
+                    }
+                    if (config.image_name) {
+                        html += `<p><strong>Image Name:</strong> <code>${config.image_name}</code></p>`;
+                    }
+                    if (config.build_context) {
+                        html += `<p><strong>Build Context:</strong> <code>${config.build_context}</code></p>`;
+                    }
+                    
+                    if (Object.keys(result.instructions.instructions || {}).length > 0) {
+                        html += '<h4 style="margin-top: 15px;">Found Instruction Files:</h4><ul>';
+                        for (const [relPath, fileData] of Object.entries(result.instructions.instructions)) {
+                            html += `<li><code>${relPath}</code> (${fileData.type})</li>`;
+                        }
+                        html += '</ul>';
+                    }
+                    
+                    html += '</div>';
+                    instructionsContent.innerHTML = html;
+                    instructionsDiv.style.display = 'block';
+                    
+                    // Store config for building
+                    window.dockerConfig = config;
+                } else {
+                    instructionsContent.innerHTML = `<p style="color: #666;">${result.error || 'No build instructions found. Looking for Lambda_build_instructions, Dockerfile, or docker-compose.yml in the aws folder.'}</p>`;
+                    instructionsDiv.style.display = 'block';
+                    window.dockerConfig = null;
+                }
+            } catch (error) {
+                showError('Error loading Docker instructions: ' + error.message);
+            }
+        }
+
+        async function buildDockerImage() {
+            if (!selectedProject) {
+                showError('Please select a project first.');
+                return;
+            }
+
+            if (!window.dockerConfig) {
+                showError('No Docker configuration found. Please load instructions first.');
+                return;
+            }
+
+            const buildBtn = document.getElementById('build-docker-btn');
+            const outputDiv = document.getElementById('docker-build-output');
+            const outputContent = document.getElementById('docker-build-output-content');
+            const packageInfoDiv = document.getElementById('docker-package-info');
+
+            buildBtn.disabled = true;
+            buildBtn.innerHTML = '<span class="loading"></span> Building & Extracting...';
+            outputDiv.style.display = 'block';
+            packageInfoDiv.style.display = 'none'; // Hide package info initially
+            outputContent.textContent = 'Building Docker image...\n';
+            outputContent.style.color = '#d4d4d4';
+            
+            // Show extraction status in output
+            const extractionStatus = document.createElement('div');
+            extractionStatus.id = 'extraction-status';
+            extractionStatus.style.display = 'none';
+            extractionStatus.style.marginTop = '10px';
+            extractionStatus.style.padding = '10px';
+            extractionStatus.style.background = '#fff3cd';
+            extractionStatus.style.borderLeft = '4px solid #ffc107';
+            extractionStatus.style.borderRadius = '4px';
+            extractionStatus.innerHTML = '<strong>⏳ Extracting Lambda package...</strong>';
+            if (!document.getElementById('extraction-status')) {
+                outputDiv.appendChild(extractionStatus);
+            }
+
+            // Store current deployment state to allow tab switching during build
+            let buildInProgress = true;
+            let deploymentId = null;
+            
+            try {
+                // Make the fetch call - it's async so won't block tab switching
+                const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(selectedProject.name)}/docker/build`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        build_args: {},
+                        tag: window.dockerConfig.image_name
+                    })
+                });
+
+                const result = await response.json();
+                buildInProgress = false;
+                deploymentId = result.deployment_id;
+
+                if (result.success) {
+                    let successMessage = `Build successful!\n\nImage: ${result.image_name}\nDeployment ID: ${result.deployment_id}\n\n`;
+                    
+                    // Hide extraction status indicator
+                    const extractionStatus = document.getElementById('extraction-status');
+                    if (extractionStatus) {
+                        extractionStatus.style.display = 'none';
+                    }
+                    
+                    // Show extraction status
+                    if (result.extracted_package_path) {
+                        successMessage += `✅ Lambda Package Extracted!\n`;
+                        successMessage += `   Path: ${result.extracted_package_path}\n`;
+                        if (result.package_info && result.package_info.size_mb) {
+                            successMessage += `   Size: ${result.package_info.size_mb} MB\n`;
+                        }
+                        successMessage += `   Status: Ready for AWS deployment\n\n`;
+                        
+                        // Display package info in dedicated section
+                        displayPackageInfo(result.extracted_package_path, result.package_info);
+                    } else {
+                        successMessage += `⚠️ Package extraction not completed\n\n`;
+                        if (extractionStatus) {
+                            extractionStatus.style.display = 'block';
+                            extractionStatus.style.background = '#f8d7da';
+                            extractionStatus.style.borderLeftColor = '#dc3545';
+                            extractionStatus.innerHTML = '<strong>⚠️ Package extraction failed or not available</strong>';
+                        }
+                    }
+                    
+                    successMessage += `Build Output:\n${result.stdout || ''}`;
+                    outputContent.textContent = successMessage;
+                    outputContent.style.color = '#d4d4d4';
+                    loadDeployments();
+                } else {
+                    outputContent.textContent = `Build failed!\n\nError: ${result.error || 'Unknown error'}\n\n${result.stderr || ''}`;
+                    outputContent.style.color = '#f8d7da';
+                    packageInfoDiv.style.display = 'none';
+                }
+            } catch (error) {
+                outputContent.textContent = `Error: ${error.message}`;
+                outputContent.style.color = '#f8d7da';
+                packageInfoDiv.style.display = 'none';
+                showError('Error building Docker image: ' + error.message);
+            } finally {
+                buildBtn.disabled = false;
+                buildBtn.textContent = 'Build Image';
+            }
+        }
+
+        function displayPackageInfo(packagePath, packageInfo) {
+            const packageInfoDiv = document.getElementById('docker-package-info');
+            const pathElement = document.getElementById('package-path');
+            const sizeElement = document.getElementById('package-size');
+            const statusElement = document.getElementById('package-status');
+
+            // Store package path globally for copy/open functions
+            window.currentPackagePath = packagePath;
+
+            pathElement.textContent = packagePath;
+            
+            if (packageInfo && packageInfo.size_mb) {
+                sizeElement.textContent = `${packageInfo.size_mb} MB`;
+            } else {
+                sizeElement.textContent = 'Unknown';
+            }
+
+            if (packageInfo && packageInfo.ready_for_deployment) {
+                statusElement.textContent = '✅ Ready for AWS Deployment';
+                statusElement.style.color = '#28a745';
+                statusElement.style.fontWeight = '600';
+            } else {
+                statusElement.textContent = 'Extraction completed';
+                statusElement.style.color = '#666';
+            }
+
+            packageInfoDiv.style.display = 'block';
+            
+            // Add animation
+            packageInfoDiv.style.opacity = '0';
+            packageInfoDiv.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+                packageInfoDiv.style.transition = 'all 0.3s ease';
+                packageInfoDiv.style.opacity = '1';
+                packageInfoDiv.style.transform = 'translateY(0)';
+            }, 100);
+            
+            // Scroll to package info
+            setTimeout(() => {
+                packageInfoDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 400);
+        }
+
+        function openPackageLocation() {
+            if (!window.currentPackagePath) {
+                showError('No package path available');
+                return;
+            }
+
+            // Extract directory path
+            const pathParts = window.currentPackagePath.replace(/\\/g, '/').split('/');
+            pathParts.pop(); // Remove filename
+            const dirPath = pathParts.join('\\');
+
+            // Show path to user (Windows Explorer opening from browser requires special handling)
+            const message = `Package Location:\n\n${dirPath}\n\nPlease navigate to this folder in Windows Explorer.\n\nOr copy the full path above.`;
+            alert(message);
+            
+            // Also try to copy the directory path
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(dirPath);
+            }
+        }
+
+        function copyPackagePath() {
+            if (!window.currentPackagePath) {
+                showError('No package path available');
+                return;
+            }
+
+            // Use Clipboard API if available
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(window.currentPackagePath).then(() => {
+                    const btn = document.getElementById('copy-path-btn');
+                    const originalText = btn.textContent;
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = '#28a745';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                    }, 2000);
+                }).catch(() => {
+                    // Fallback: select text
+                    const pathElement = document.getElementById('package-path');
+                    const range = document.createRange();
+                    range.selectNode(pathElement);
+                    window.getSelection().removeAllRanges();
+                    window.getSelection().addRange(range);
+                    alert('Path selected. Press Ctrl+C to copy.');
+                });
+            } else {
+                // Fallback: select text
+                const pathElement = document.getElementById('package-path');
+                const range = document.createRange();
+                range.selectNode(pathElement);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                alert('Path selected. Press Ctrl+C to copy.');
+            }
+        }
+
+        async function loadDeployments() {
+            try {
+                const response = await fetch(`${API_BASE}/docker/deployments`);
+                const result = await response.json();
+
+                const container = document.getElementById('deployments-container');
+                
+                if (result.success && result.deployments && result.deployments.length > 0) {
+                    let html = '';
+                    result.deployments.forEach(deployment => {
+                        const statusClass = deployment.status === 'completed' ? 'success' : 
+                                          deployment.status === 'failed' ? 'failed' : 
+                                          deployment.status === 'building' ? 'running' : 'pending';
+                        
+                        html += `
+                            <div class="pipeline-step ${statusClass}">
+                                <div class="step-header">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="step-number ${statusClass}">${deployment.id.slice(-2)}</span>
+                                        <div>
+                                            <div class="step-title">${deployment.type.toUpperCase()}: ${deployment.image_name || deployment.container_name || deployment.id}</div>
+                                            <div class="step-description">Status: ${deployment.status}</div>
+                                        </div>
+                                    </div>
+                                    <span class="step-status ${statusClass}">${deployment.status}</span>
+                                </div>
+                                ${deployment.start_time ? `<div style="color: #666; font-size: 0.85em; margin-top: 10px;">Started: ${new Date(deployment.start_time).toLocaleString()}</div>` : ''}
+                                ${deployment.stdout ? `<div class="step-output" style="margin-top: 10px;"><pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto; font-size: 0.85em;">${deployment.stdout.substring(0, 1000)}${deployment.stdout.length > 1000 ? '...' : ''}</pre></div>` : ''}
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p style="color: #666; font-style: italic;">No active deployments.</p>';
+                }
+            } catch (error) {
+                showError('Error loading deployments: ' + error.message);
+            }
+        }
+
+        // Auto-refresh deployments every 5 seconds when on Docker tab
+        let deploymentRefreshInterval = null;
+        function startDeploymentRefresh() {
+            if (deploymentRefreshInterval) clearInterval(deploymentRefreshInterval);
+            deploymentRefreshInterval = setInterval(() => {
+                if (document.getElementById('docker-deployment').style.display !== 'none') {
+                    loadDeployments();
+                }
+            }, 5000);
+        }
+
         // Load scripts on page load
         loadScripts();
+        startDeploymentRefresh();
     </script>
 </body>
 </html>

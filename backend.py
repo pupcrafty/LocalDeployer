@@ -41,6 +41,25 @@ except Exception as e:
     print(f"Warning: OpenAI agents module not available. AI analysis features will be disabled.")
     print(f"Error details: {OPENAI_ERROR}")
 
+# Import Docker deployment manager
+DOCKER_AVAILABLE = False
+docker_manager = None
+try:
+    from docker_deployment import get_docker_manager
+    DOCKER_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Docker deployment module not available: {e}")
+except Exception as e:
+    print(f"Warning: Error loading Docker deployment module: {e}")
+
+# Initialize docker_manager after WORKSPACE_ROOT is defined
+if DOCKER_AVAILABLE:
+    try:
+        docker_manager = get_docker_manager(WORKSPACE_ROOT)
+    except Exception as e:
+        print(f"Warning: Failed to initialize Docker manager: {e}")
+        DOCKER_AVAILABLE = False
+
 app = Flask(__name__, static_folder='frontend')
 CORS(app)  # Enable CORS for frontend
 
@@ -55,30 +74,85 @@ running_scripts = {}
 script_lock = threading.Lock()
 
 def load_script_arguments(aws_folder):
-    """Load script_arguments.json from the aws folder if it exists"""
-    script_args_file = aws_folder / "script_arguments.json"
+    """Load script-arguments.json (or script_arguments.json for backward compatibility) from the aws folder if it exists"""
+    # Try hyphen version first (preferred)
+    script_args_file = aws_folder / "script-arguments.json"
+    if not script_args_file.exists():
+        # Fall back to underscore version for backward compatibility
+        script_args_file = aws_folder / "script_arguments.json"
+    
     if script_args_file.exists():
         try:
             with open(script_args_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                logger.info(f"Successfully loaded script_arguments.json from {aws_folder}")
+                logger.info(f"Successfully loaded {script_args_file.name} from {aws_folder}")
                 return data
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in script_arguments.json at {aws_folder}: {e}")
+            logger.error(f"Invalid JSON in {script_args_file.name} at {aws_folder}: {e}")
         except Exception as e:
-            logger.warning(f"Failed to load script_arguments.json from {aws_folder}: {e}")
+            logger.warning(f"Failed to load {script_args_file.name} from {aws_folder}: {e}")
     else:
-        logger.debug(f"No script_arguments.json found in {aws_folder}")
+        logger.debug(f"No script-arguments.json or script_arguments.json found in {aws_folder}")
     return None
 
 def get_script_info(script_name, script_args_data):
-    """Get script information from script_arguments.json"""
-    if not script_args_data or "scripts" not in script_args_data:
+    """Get script information from script-arguments.json (or script_arguments.json)
+    Supports two formats:
+    1. Array format: {"scripts": [{"name": "script.py", ...}]}
+    2. Object format: {"scripts": {"script.py": {...}}}
+    """
+    if not script_args_data:
         return None
     
-    for script_info in script_args_data["scripts"]:
-        if script_info.get("name") == script_name:
-            return script_info
+    if not isinstance(script_args_data, dict):
+        logger.warning(f"script-arguments.json data is not a dictionary: {type(script_args_data)}")
+        return None
+    
+    if "scripts" not in script_args_data:
+        return None
+    
+    scripts_data = script_args_data.get("scripts")
+    
+    # Handle object format (DiamondDrip style): {"scripts": {"script.py": {...}}}
+    if isinstance(scripts_data, dict):
+        if script_name in scripts_data:
+            script_info = scripts_data[script_name]
+            if isinstance(script_info, dict):
+                # Convert arguments from object to array format for frontend compatibility
+                if "arguments" in script_info and isinstance(script_info["arguments"], dict):
+                    args_dict = script_info["arguments"]
+                    args_array = []
+                    for arg_name, arg_data in args_dict.items():
+                        if isinstance(arg_data, dict):
+                            arg_entry = {
+                                "name": arg_name,
+                                "type": arg_data.get("type", "string"),
+                                "required": arg_data.get("required", False),
+                                "description": arg_data.get("description", ""),
+                                "default": arg_data.get("default")
+                            }
+                            # Add example if available
+                            if "example" in arg_data:
+                                arg_entry["example"] = arg_data["example"]
+                            elif "examples" in arg_data and isinstance(arg_data["examples"], list) and len(arg_data["examples"]) > 0:
+                                arg_entry["example"] = arg_data["examples"][0]
+                            args_array.append(arg_entry)
+                    script_info = script_info.copy()  # Don't modify original
+                    script_info["arguments"] = args_array
+                return script_info
+        return None
+    
+    # Handle array format: {"scripts": [{"name": "script.py", ...}]}
+    if isinstance(scripts_data, list):
+        for script_info in scripts_data:
+            if not isinstance(script_info, dict):
+                logger.warning(f"Invalid script entry in script-arguments.json (not a dict): {type(script_info)}")
+                continue
+            if script_info.get("name") == script_name:
+                return script_info
+        return None
+    
+    logger.warning(f"scripts field in script-arguments.json is neither a list nor a dict: {type(scripts_data)}")
     return None
 
 def discover_aws_scripts():
@@ -93,7 +167,7 @@ def discover_aws_scripts():
         if aws_folder.is_dir():
             project_name = aws_folder.parent.name
             
-            # Load script_arguments.json for this project
+            # Load script-arguments.json for this project
             script_args_data = load_script_arguments(aws_folder)
             
             # Find all Python scripts in this aws folder (including subdirectories)
@@ -122,7 +196,7 @@ def discover_aws_scripts():
                         script_info["arguments_info"] = script_args_info
                         logger.debug(f"Added arguments_info for {script_file.name}")
                     else:
-                        logger.debug(f"No matching entry in script_arguments.json for {script_file.name}")
+                        logger.debug(f"No matching entry in script-arguments.json for {script_file.name}")
                 
                 scripts.append(script_info)
     
@@ -170,6 +244,57 @@ def discover_aws_yaml_files():
                 })
     
     return sorted(yaml_files, key=lambda x: (x["project"], x["name"]))
+
+def discover_build_instruction_files():
+    """Discover build instruction files (Lambda_build_instructions, Dockerfile, etc.) in aws folders"""
+    instruction_files = []
+    
+    if not WORKSPACE_ROOT.exists():
+        return instruction_files
+    
+    # Patterns to look for
+    patterns = [
+        "*Lambda_build_instructions*",
+        "*build_instructions*",
+        "*docker*instructions*",
+        "*deployment*instructions*",
+        "Dockerfile",
+        "docker-compose.yml",
+        "docker-compose.yaml"
+    ]
+    
+    # Find all aws folders
+    for aws_folder in WORKSPACE_ROOT.rglob("aws"):
+        if aws_folder.is_dir():
+            project_name = aws_folder.parent.name
+            
+            # Search for instruction files
+            for pattern in patterns:
+                for instruction_file in aws_folder.rglob(pattern):
+                    if instruction_file.is_file():
+                        # Calculate relative path from aws folder
+                        rel_path = instruction_file.relative_to(aws_folder)
+                        rel_path_str = str(rel_path).replace("\\", "/")
+                        
+                        # Detect file type
+                        file_type = "instructions"
+                        if "dockerfile" in instruction_file.name.lower():
+                            file_type = "dockerfile"
+                        elif "docker-compose" in instruction_file.name.lower():
+                            file_type = "docker_compose"
+                        elif "lambda_build" in instruction_file.name.lower() or "build_instructions" in instruction_file.name.lower():
+                            file_type = "build_instructions"
+                        
+                        instruction_files.append({
+                            "id": f"{project_name}_instruction_{instruction_file.stem}",
+                            "project": project_name,
+                            "name": instruction_file.name,
+                            "path": str(instruction_file),
+                            "relative_path": f"{project_name}/aws/{rel_path_str}",
+                            "type": file_type
+                        })
+    
+    return sorted(instruction_files, key=lambda x: (x["project"], x["name"]))
 
 def run_script(script_path, args=None, cwd=None):
     """Run a Python script and capture its output"""
@@ -790,6 +915,7 @@ def get_projects():
     try:
         scripts = discover_aws_scripts()
         yaml_files = discover_aws_yaml_files()
+        instruction_files = discover_build_instruction_files()
         
         # Group by project
         projects = {}
@@ -800,7 +926,8 @@ def get_projects():
                 projects[project] = {
                     "name": project,
                     "scripts": [],
-                    "yaml_files": []
+                    "yaml_files": [],
+                    "instruction_files": []
                 }
             projects[project]["scripts"].append(script)
         
@@ -810,9 +937,21 @@ def get_projects():
                 projects[project] = {
                     "name": project,
                     "scripts": [],
-                    "yaml_files": []
+                    "yaml_files": [],
+                    "instruction_files": []
                 }
             projects[project]["yaml_files"].append(yaml_file)
+        
+        for instruction_file in instruction_files:
+            project = instruction_file["project"]
+            if project not in projects:
+                projects[project] = {
+                    "name": project,
+                    "scripts": [],
+                    "yaml_files": [],
+                    "instruction_files": []
+                }
+            projects[project]["instruction_files"].append(instruction_file)
         
         # Convert to list and sort
         projects_list = sorted(projects.values(), key=lambda x: x["name"])
@@ -1790,6 +1929,278 @@ def debug_agent():
             "success": False,
             "error": str(e),
             "traceback": traceback.format_exc()
+        }), 500
+
+@app.route('/api/docker/check', methods=['GET'])
+def check_docker():
+    """Check if Docker is available"""
+    global docker_manager, DOCKER_AVAILABLE
+    if not DOCKER_AVAILABLE or docker_manager is None:
+        # Try to initialize if not available
+        try:
+            from docker_deployment import get_docker_manager
+            docker_manager = get_docker_manager(WORKSPACE_ROOT)
+            DOCKER_AVAILABLE = True
+        except Exception as e:
+            logger.error(f"Failed to initialize Docker manager: {e}", exc_info=True)
+            return jsonify({
+                "success": False,
+                "available": False,
+                "error": f"Docker deployment module not available: {str(e)}"
+            }), 503
+    
+    try:
+        result = docker_manager.check_docker_available()
+        return jsonify({
+            "success": True,
+            **result
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "available": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/projects/<project_name>/docker/instructions', methods=['GET'])
+def get_docker_instructions(project_name):
+    """Get Docker build instructions for a project"""
+    global docker_manager, DOCKER_AVAILABLE
+    if not DOCKER_AVAILABLE or docker_manager is None:
+        # Try to initialize if not available
+        try:
+            from docker_deployment import get_docker_manager
+            docker_manager = get_docker_manager(WORKSPACE_ROOT)
+            DOCKER_AVAILABLE = True
+        except Exception as e:
+            logger.error(f"Failed to initialize Docker manager: {e}", exc_info=True)
+            return jsonify({
+                "success": False,
+                "error": f"Docker deployment module not available: {str(e)}"
+            }), 503
+    
+    try:
+        instructions = docker_manager.discover_build_instructions(project_name)
+        if instructions:
+            parsed = docker_manager.parse_build_instructions(instructions)
+            return jsonify({
+                "success": True,
+                "instructions": instructions,
+                "parsed_config": parsed
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"No build instructions found for project: {project_name}",
+                "instructions": None
+            }), 404
+    except Exception as e:
+        logger.error(f"Error getting Docker instructions: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/projects/<project_name>/docker/build', methods=['POST'])
+def build_docker_image(project_name):
+    """Build a Docker image for a project"""
+    if not DOCKER_AVAILABLE:
+        return jsonify({
+            "success": False,
+            "error": "Docker deployment module not available"
+        }), 503
+    
+    try:
+        # Get build instructions
+        instructions = docker_manager.discover_build_instructions(project_name)
+        if not instructions:
+            return jsonify({
+                "success": False,
+                "error": f"No build instructions found for project: {project_name}"
+            }), 404
+        
+        # Parse instructions
+        config = docker_manager.parse_build_instructions(instructions)
+        
+        # Get build args from request
+        data = request.get_json() or {}
+        build_args = data.get("build_args", {})
+        tag = data.get("tag")
+        
+        # Build the image (this will also extract the lambda package automatically)
+        result = docker_manager.build_docker_image(config, build_args=build_args, tag=tag)
+        
+        # Add additional info about the extracted package
+        if result.get("success") and result.get("extracted_package_path"):
+            package_path = Path(result["extracted_package_path"])
+            if package_path.exists():
+                result["package_info"] = {
+                    "path": str(package_path),
+                    "size_mb": round(package_path.stat().st_size / (1024 * 1024), 2),
+                    "ready_for_deployment": True
+                }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error building Docker image: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/docker/deployments', methods=['GET'])
+def list_deployments():
+    """List all Docker deployments"""
+    if not DOCKER_AVAILABLE:
+        return jsonify({
+            "success": False,
+            "deployments": [],
+            "error": "Docker deployment module not available"
+        }), 503
+    
+    try:
+        deployments = docker_manager.list_deployments()
+        # Convert datetime objects to strings for JSON serialization
+        for deployment in deployments:
+            if "start_time" in deployment and isinstance(deployment["start_time"], datetime):
+                deployment["start_time"] = deployment["start_time"].isoformat()
+            if "end_time" in deployment and isinstance(deployment["end_time"], datetime):
+                deployment["end_time"] = deployment["end_time"].isoformat()
+            # Remove process object if present (not JSON serializable)
+            if "process" in deployment:
+                deployment["process"] = "running" if deployment.get("process") and hasattr(deployment["process"], "poll") and deployment["process"].poll() is None else "completed"
+        
+        return jsonify({
+            "success": True,
+            "deployments": deployments,
+            "count": len(deployments)
+        })
+    except Exception as e:
+        logger.error(f"Error listing deployments: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "deployments": [],
+            "error": str(e)
+        }), 500
+
+@app.route('/api/docker/deployments/<deployment_id>', methods=['GET'])
+def get_deployment_status(deployment_id):
+    """Get status of a specific deployment"""
+    if not DOCKER_AVAILABLE:
+        return jsonify({
+            "success": False,
+            "error": "Docker deployment module not available"
+        }), 503
+    
+    try:
+        deployment = docker_manager.get_deployment_status(deployment_id)
+        if deployment:
+            # Convert datetime objects to strings
+            if "start_time" in deployment and isinstance(deployment["start_time"], datetime):
+                deployment["start_time"] = deployment["start_time"].isoformat()
+            if "end_time" in deployment and isinstance(deployment["end_time"], datetime):
+                deployment["end_time"] = deployment["end_time"].isoformat()
+            # Remove process object
+            if "process" in deployment:
+                deployment["process"] = "running" if deployment.get("process") and hasattr(deployment["process"], "poll") and deployment["process"].poll() is None else "completed"
+            
+            return jsonify({
+                "success": True,
+                "deployment": deployment
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Deployment {deployment_id} not found"
+            }), 404
+    except Exception as e:
+        logger.error(f"Error getting deployment status: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/docker/deployments/<deployment_id>/stop', methods=['POST'])
+def stop_deployment(deployment_id):
+    """Stop a running deployment"""
+    if not DOCKER_AVAILABLE:
+        return jsonify({
+            "success": False,
+            "error": "Docker deployment module not available"
+        }), 503
+    
+    try:
+        result = docker_manager.stop_deployment(deployment_id)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error stopping deployment: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/docker/containers/<container_name>/logs', methods=['GET'])
+def get_container_logs(container_name):
+    """Get logs from a Docker container"""
+    if not DOCKER_AVAILABLE:
+        return jsonify({
+            "success": False,
+            "error": "Docker deployment module not available"
+        }), 503
+    
+    try:
+        tail = request.args.get('tail', 100, type=int)
+        result = docker_manager.get_container_logs(container_name, tail=tail)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error getting container logs: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/projects/<project_name>/docker/run', methods=['POST'])
+def run_docker_container(project_name):
+    """Run a Docker container for a project"""
+    if not DOCKER_AVAILABLE:
+        return jsonify({
+            "success": False,
+            "error": "Docker deployment module not available"
+        }), 503
+    
+    try:
+        data = request.get_json() or {}
+        image_name = data.get("image_name")
+        
+        if not image_name:
+            return jsonify({
+                "success": False,
+                "error": "image_name is required"
+            }), 400
+        
+        container_name = data.get("container_name")
+        ports = data.get("ports", {})
+        environment_vars = data.get("environment_vars", {})
+        volumes = data.get("volumes", {})
+        detach = data.get("detach", True)
+        
+        result = docker_manager.run_docker_container(
+            image_name=image_name,
+            container_name=container_name,
+            ports=ports,
+            environment_vars=environment_vars,
+            volumes=volumes,
+            detach=detach
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error running Docker container: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
         }), 500
 
 @app.route('/')
