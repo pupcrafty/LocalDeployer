@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalDeployer - AWS Script Runner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .script-list {
+            list-style: none;
+        }
+
+        .project-group {
+            margin-bottom: 15px;
+        }
+
+        .project-header {
+            padding: 10px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .project-header:hover {
+            background: #5568d3;
+        }
+
+        .project-header .project-name {
+            flex: 1;
+        }
+
+        .project-header .project-count {
+            font-size: 0.85em;
+            opacity: 0.9;
+            margin-left: 10px;
+        }
+
+        .project-header .toggle-icon {
+            font-size: 0.9em;
+            transition: transform 0.2s;
+        }
+
+        .project-header.collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .project-scripts {
+            padding-left: 10px;
+            max-height: 1000px;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .project-group.collapsed .project-scripts {
+            max-height: 0;
+            padding: 0;
+        }
+
+        .script-item {
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            margin-left: 10px;
+        }
+
+        .script-item:hover {
+            background: #e8e8e8;
+            transform: translateX(5px);
+        }
+
+        .script-item.active {
+            background: #667eea;
+            color: white;
+            border-color: #764ba2;
+        }
+
+        .script-item .name {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .yaml-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            background: #f0f8ff;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            margin-left: 10px;
+            border-left: 3px solid #4a90e2;
+        }
+
+        .yaml-item:hover {
+            background: #e0f0ff;
+            transform: translateX(5px);
+        }
+
+        .yaml-item .name {
+            font-weight: 500;
+            font-size: 0.9em;
+            color: #2c5aa0;
+        }
+
+        .yaml-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .yaml-section-title {
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+            margin-left: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .content-area {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .script-details {
+            margin-bottom: 20px;
+        }
+
+        .script-details h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .script-path {
+            color: #666;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+
+        .args-input {
+            margin-bottom: 20px;
+        }
+
+        .args-input label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .args-input input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+        }
+
+        .args-input input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .output-area {
+            margin-top: 20px;
+        }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .output-header h3 {
+            color: #333;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-badge.running {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .output-content {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .output-content.empty {
+            color: #888;
+            font-style: italic;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .refresh-btn {
+            margin-bottom: 15px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .project-landing {
+            padding: 20px 0;
+        }
+
+        .project-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .project-info h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .project-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .project-stat {
+            text-align: center;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+        }
+
+        .project-stat-value {
+            font-size: 2em;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .project-stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .analyze-button {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+
+        .file-list {
+            margin-top: 20px;
+        }
+
+        .file-list-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-list-item .file-icon {
+            font-size: 1.2em;
+        }
+
+        .pipeline-execution-content {
+            padding: 20px 0;
+        }
+
+        .pipeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .pipeline-header h2 {
+            color: #333;
+            margin: 0;
+        }
+
+        .pipeline-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .pipeline-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .pipeline-steps {
+            margin-top: 20px;
+        }
+
+        .pipeline-step {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.2s;
+        }
+
+        .pipeline-step.active {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .pipeline-step.completed {
+            border-color: #28a745;
+            background: #f8fff9;
+        }
+
+        .pipeline-step.failed {
+            border-color: #dc3545;
+            background: #fff8f8;
+        }
+
+        .pipeline-step.pending {
+            opacity: 0.6;
+        }
+
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .step-number.completed {
+            background: #28a745;
+        }
+
+        .step-number.failed {
+            background: #dc3545;
+        }
+
+        .step-title {
+            flex: 1;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .step-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .step-status.pending {
+            background: #e9ecef;
+            color: #6c757d;
+        }
+
+        .step-status.running {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .step-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .step-status.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .step-description {
+            color: #666;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+
+        .step-details {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .step-arguments {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #666;
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+
+        .step-output {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .step-output.collapsed {
+            display: none;
+        }
+
+        .step-output-toggle {
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+
+        .execution-result-item {
+            background: white;
+            border-left: 4px solid #667eea;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .execution-result-item.success {
+            border-left-color: #28a745;
+        }
+
+        .execution-result-item.failed {
+            border-left-color: #dc3545;
+        }
+
+        .execution-progress {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+        }
+
+        .active-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #d1ecf1;
+            color: #0c5460;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .action-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .action-badge.runscript {
+            background: #e7f3ff;
+            color: #0066cc;
+        }
+
+        .action-badge.sendagent {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .action-badge.inspect {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .action-badge.wait {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .action-badge.stop {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .action-badge.continue {
+            background: #e0f2f1;
+            color: #00695c;
+        }
+
+        .action-badge.retry {
+            background: #fff9c4;
+            color: #f57f17;
+        }
+
+        .current-activity {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .current-activity.active {
+            display: block;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+
+        .activity-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .activity-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .step-running {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-running::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.1), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+            50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+        }
+
+        .action-detail {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+
+        .action-detail.running {
+            border-left-color: #ffc107;
+            background: #fffbf0;
+        }
+
+        .action-detail.success {
+            border-left-color: #28a745;
+            background: #f0fff4;
+        }
+
+        .action-detail.failed {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 LocalDeployer</h1>
+            <p>Run Python scripts from AWS folders across your workspace</p>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="refresh-btn">
+                    <button class="btn btn-secondary" onclick="loadScripts()" style="width: 100%;">
+                        🔄 Refresh Scripts
+                    </button>
+                </div>
+                <h2>Available Scripts</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-value" id="script-count">0</div>
+                        <div class="stat-label">Scripts</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="project-count">0</div>
+                        <div class="stat-label">Projects</div>
+                    </div>
+                </div>
+                <div id="script-list">
+                    <div style="padding: 20px; text-align: center; color: #666;">
+                        Loading scripts...
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- Project Landing Tab -->
+                <div id="project-landing" style="display: none;">
+                    <div class="tabs">
+                        <button class="tab active" onclick="showProjectLanding()" id="project-tab">📁 Project Overview</button>
+                        <button class="tab" onclick="showScriptDetails()" id="script-tab">▶ Script Execution</button>
+                    </div>
+                    
+                    <div class="project-landing">
+                        <div class="project-info">
+                            <h3 id="project-landing-name">Project Name</h3>
+                            <div class="project-stats">
+                                <div class="project-stat">
+                                    <div class="project-stat-value" id="project-script-count">0</div>
+                                    <div class="project-stat-label">Scripts</div>
+                                </div>
+                                <div class="project-stat">
+                                    <div class="project-stat-value" id="project-yaml-count">0</div>
+                                    <div class="project-stat-label">YAML Files</div>
+                                </div>
+                                <div class="project-stat">
+                                    <div class="project-stat-value" id="project-total-count">0</div>
+                                    <div class="project-stat-label">Total Files</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary analyze-button" onclick="analyzeProject()" id="analyze-btn">
+                            🤖 Analyze Project with AI
+                        </button>
+
+                        <div id="project-analysis-result" style="display: none;">
+                            <div class="output-area">
+                                <div class="output-header">
+                                    <h3>AI Analysis Result</h3>
+                                    <span class="status-badge" id="analysis-status-badge"></span>
+                                </div>
+                                <div class="output-content" id="project-analysis-content">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="file-list" id="project-file-list">
+                            <h3 style="margin-bottom: 15px;">Project Files</h3>
+                            <div id="project-files-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Script Details Tab -->
+                <div id="script-details" style="display: none;">
+                    <div class="tabs">
+                        <button class="tab" onclick="showProjectLanding()" id="project-tab-2">📁 Project Overview</button>
+                        <button class="tab active" onclick="showScriptDetails()" id="script-tab-2">▶ Script Execution</button>
+                    </div>
+                    
+                    <div class="script-details">
+                        <h2 id="script-name">Select a script</h2>
+                        <div class="script-path" id="script-path"></div>
+                        
+                        <div class="args-input">
+                            <label for="script-args">Arguments (space-separated):</label>
+                            <input type="text" id="script-args" placeholder="--env production --region us-east-1">
+                        </div>
+
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="runScript()" id="run-btn">
+                                ▶ Run Script
+                            </button>
+                            <button class="btn btn-danger" onclick="stopScript()" id="stop-btn" style="display: none;">
+                                ⏹ Stop Script
+                            </button>
+                            <button class="btn btn-secondary" onclick="callDebugAgent()" id="debug-btn" disabled>
+                                🤖 Call Debug Agent
+                            </button>
+                        </div>
+
+                        <div id="error-message" style="display: none;"></div>
+
+                        <!-- Script Arguments Information -->
+                        <div id="script-arguments-info" style="display: none; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #667eea;">
+                            <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📋 Script Information</h3>
+                            <div id="script-description" style="margin-bottom: 15px; color: #555; line-height: 1.6;"></div>
+                            <div id="script-arguments-list" style="margin-top: 15px;"></div>
+                        </div>
+
+                        <div class="output-area">
+                            <div class="output-header">
+                                <h3>Output</h3>
+                                <span class="status-badge" id="status-badge" style="display: none;"></span>
+                            </div>
+                            <div class="output-content empty" id="output-content" style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9em;">
+                                No output yet. Select a script and click "Run Script" to execute it.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="no-selection" style="text-align: center; padding: 60px; color: #666;">
+                    <h2>👈 Select a project or script from the sidebar</h2>
+                    <p>Scripts are automatically discovered from AWS folders in your workspace</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let projects = [];
+        let selectedScript = null;
+        let selectedProject = null;
+        let lastOutput = null;
+
+        async function loadScripts() {
+            try {
+                const response = await fetch(`${API_BASE}/projects`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    projects = data.projects;
+                    // Debug: Check if any scripts have arguments_info
+                    projects.forEach(project => {
+                        project.scripts.forEach(script => {
+                            if (script.arguments_info) {
+                                console.log(`Script ${script.name} has arguments_info:`, script.arguments_info);
+                            }
+                        });
+                    });
+                    renderScriptList();
+                    
+                    // Calculate total counts
+                    let totalScripts = 0;
+                    let totalYamlFiles = 0;
+                    projects.forEach(project => {
+                        totalScripts += project.scripts.length;
+                        totalYamlFiles += project.yaml_files.length;
+                    });
+                    
+                    document.getElementById('script-count').textContent = totalScripts;
+                    document.getElementById('project-count').textContent = projects.length;
+                } else {
+                    showError('Failed to load projects: ' + data.error);
+                }
+            } catch (error) {
+                showError('Error connecting to backend: ' + error.message);
+                console.error('Error loading projects:', error);
+            }
+        }
+
+        function renderScriptList() {
+            const list = document.getElementById('script-list');
+            
+            if (projects.length === 0) {
+                list.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No projects found</div>';
+                return;
+            }
+
+            // Render grouped projects with scripts and YAML files
+            list.innerHTML = projects.map(project => {
+                const projectId = `project-${project.name.replace(/\s+/g, '-').toLowerCase()}`;
+                const totalItems = project.scripts.length + project.yaml_files.length;
+                const isSelected = selectedProject?.name === project.name;
+                
+                return `
+                    <div class="project-group" id="${projectId}">
+                        <div class="project-header ${isSelected ? 'active' : ''}">
+                            <span class="project-name" onclick="selectProject('${project.name}');" 
+                                  style="cursor: pointer; flex: 1;">📁 ${project.name}</span>
+                            <span class="project-count">${totalItems} item${totalItems !== 1 ? 's' : ''}</span>
+                            <span class="toggle-icon" onclick="event.stopPropagation(); toggleProject('${projectId}');" 
+                                  style="cursor: pointer; margin-left: 10px;">▼</span>
+                        </div>
+                        <div class="project-scripts">
+                            ${project.scripts.length > 0 ? project.scripts.map(script => `
+                                <div class="script-item ${selectedScript?.id === script.id ? 'active' : ''}" 
+                                    onclick="selectScript('${script.id}')">
+                                    <div class="name">🐍 ${script.name}</div>
+                                </div>
+                            `).join('') : ''}
+                            ${project.yaml_files.length > 0 ? `
+                                <div class="yaml-section">
+                                    <div class="yaml-section-title">YAML Files</div>
+                                    ${project.yaml_files.map(yamlFile => `
+                                        <div class="yaml-item" onclick="selectYamlFile('${yamlFile.id}')">
+                                            <div class="name">📄 ${yamlFile.name}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleProject(projectId) {
+            const projectGroup = document.getElementById(projectId);
+            const projectHeader = projectGroup.querySelector('.project-header');
+            projectGroup.classList.toggle('collapsed');
+            projectHeader.classList.toggle('collapsed');
+        }
+
+        function findScriptById(scriptId) {
+            for (const project of projects) {
+                const script = project.scripts.find(s => s.id === scriptId);
+                if (script) return script;
+            }
+            return null;
+        }
+
+        function selectProject(projectName) {
+            selectedProject = projects.find(p => p.name === projectName);
+            if (!selectedProject) return;
+
+            // Expand the project group if collapsed
+            const projectId = `project-${projectName.replace(/\s+/g, '-').toLowerCase()}`;
+            const projectGroup = document.getElementById(projectId);
+            if (projectGroup && projectGroup.classList.contains('collapsed')) {
+                projectGroup.classList.remove('collapsed');
+                const projectHeader = projectGroup.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.classList.remove('collapsed');
+                }
+            }
+
+            // Show project landing
+            showProjectLanding();
+            updateProjectLanding();
+        }
+
+        function showProjectLanding() {
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('script-details').style.display = 'none';
+            document.getElementById('project-landing').style.display = 'block';
+            
+            // Update tab states
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById('project-tab')?.classList.add('active');
+            document.getElementById('project-tab-2')?.classList.add('active');
+        }
+
+
+        function showScriptDetails() {
+            if (!selectedScript) return;
+            
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('project-landing').style.display = 'none';
+            document.getElementById('script-details').style.display = 'block';
+            
+            // Update script name and path
+            document.getElementById('script-name').textContent = selectedScript.name;
+            document.getElementById('script-path').textContent = selectedScript.path;
+            
+            // Display script arguments info if available
+            const argsInfoDiv = document.getElementById('script-arguments-info');
+            const descriptionDiv = document.getElementById('script-description');
+            const argsListDiv = document.getElementById('script-arguments-list');
+            
+            if (selectedScript.arguments_info) {
+                const info = selectedScript.arguments_info;
+                
+                // Show description
+                if (info.description) {
+                    descriptionDiv.innerHTML = `<p style="margin: 0; color: #555; line-height: 1.6;">${info.description}</p>`;
+                } else {
+                    descriptionDiv.innerHTML = '';
+                }
+                
+                // Show arguments
+                if (info.arguments && info.arguments.length > 0) {
+                    let argsHtml = '<h4 style="margin-top: 0; margin-bottom: 10px; color: #333;">Arguments:</h4>';
+                    argsHtml += '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                    
+                    info.arguments.forEach(arg => {
+                        const requiredBadge = arg.required ? '<span style="background: #dc3545; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-left: 5px;">Required</span>' : '<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-left: 5px;">Optional</span>';
+                        const defaultText = arg.default ? ` <span style="color: #666; font-size: 0.9em;">(default: ${arg.default})</span>` : '';
+                        
+                        argsHtml += `
+                            <div style="padding: 10px; background: white; border-radius: 4px; border-left: 3px solid #667eea;">
+                                <div style="font-weight: 600; color: #333; margin-bottom: 5px;">
+                                    <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace;">${arg.name}</code>
+                                    ${requiredBadge}
+                                    ${defaultText}
+                                </div>
+                                <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">${arg.description || 'No description provided.'}</div>
+                                ${arg.example ? `<div style="color: #888; font-size: 0.85em; font-family: 'Courier New', monospace;">Example: ${arg.example}</div>` : ''}
+                            </div>
+                        `;
+                    });
+                    
+                    argsHtml += '</div>';
+                    
+                    // Show requirements if available
+                    if (info.requirements && info.requirements.length > 0) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Requirements:</h4>';
+                        argsHtml += '<ul style="margin: 0; padding-left: 20px; color: #666;">';
+                        info.requirements.forEach(req => {
+                            argsHtml += `<li>${req}</li>`;
+                        });
+                        argsHtml += '</ul>';
+                    }
+                    
+                    // Show output description if available
+                    if (info.output) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Output:</h4>';
+                        argsHtml += `<p style="margin: 0; color: #666;">${info.output}</p>`;
+                    }
+                    
+                    argsListDiv.innerHTML = argsHtml;
+                } else {
+                    argsListDiv.innerHTML = '<p style="color: #999; font-style: italic;">No arguments defined for this script.</p>';
+                }
+                
+                argsInfoDiv.style.display = 'block';
+            } else {
+                argsInfoDiv.style.display = 'none';
+            }
+            
+            // Update tab states
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById('script-tab')?.classList.add('active');
+            document.getElementById('script-tab-2')?.classList.add('active');
+        }
+
+        function updateProjectLanding() {
+            if (!selectedProject) return;
+
+            document.getElementById('project-landing-name').textContent = selectedProject.name;
+            document.getElementById('project-script-count').textContent = selectedProject.scripts.length;
+            document.getElementById('project-yaml-count').textContent = selectedProject.yaml_files.length;
+            document.getElementById('project-total-count').textContent = 
+                selectedProject.scripts.length + selectedProject.yaml_files.length;
+
+
+            // Update file list
+            const filesContainer = document.getElementById('project-files-container');
+            filesContainer.innerHTML = '';
+            
+            selectedProject.scripts.forEach(script => {
+                const item = document.createElement('div');
+                item.className = 'file-list-item';
+                item.innerHTML = `
+                    <span class="file-icon">🐍</span>
+                    <span>${script.name}</span>
+                `;
+                filesContainer.appendChild(item);
+            });
+
+            selectedProject.yaml_files.forEach(yamlFile => {
+                const item = document.createElement('div');
+                item.className = 'file-list-item';
+                item.innerHTML = `
+                    <span class="file-icon">📄</span>
+                    <span>${yamlFile.name}</span>
+                `;
+                filesContainer.appendChild(item);
+            });
+        }
+
+        async function analyzeProject() {
+            if (!selectedProject) return;
+
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const resultDiv = document.getElementById('project-analysis-result');
+            const analysisContent = document.getElementById('project-analysis-content');
+            const statusBadge = document.getElementById('analysis-status-badge');
+
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<span class="loading"></span> Analyzing...';
+            resultDiv.style.display = 'block';
+            analysisContent.textContent = 'Analyzing project files with AI...';
+            statusBadge.className = 'status-badge running';
+            statusBadge.textContent = 'Analyzing';
+            statusBadge.style.display = 'inline-block';
+
+            try {
+                const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(selectedProject.name)}/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    analysisContent.textContent = result.analysis || 'Analysis completed.';
+                    statusBadge.className = 'status-badge success';
+                    statusBadge.textContent = 'Success';
+                    
+                    // Pipeline execution removed - no longer needed
+                } else {
+                    analysisContent.textContent = `Error: ${result.error || 'Unknown error'}`;
+                    statusBadge.className = 'status-badge error';
+                    statusBadge.textContent = 'Error';
+                }
+            } catch (error) {
+                analysisContent.textContent = `Error: ${error.message}`;
+                statusBadge.className = 'status-badge error';
+                statusBadge.textContent = 'Error';
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = '🤖 Analyze Project with AI';
+            }
+        }
+
+        function selectScript(scriptId) {
+            selectedScript = findScriptById(scriptId);
+            if (!selectedScript) return;
+
+            // Set selected project
+            selectedProject = projects.find(p => p.name === selectedScript.project);
+
+            // Expand the project group if collapsed
+            const projectId = `project-${selectedScript.project.replace(/\s+/g, '-').toLowerCase()}`;
+            const projectGroup = document.getElementById(projectId);
+            if (projectGroup && projectGroup.classList.contains('collapsed')) {
+                projectGroup.classList.remove('collapsed');
+                const projectHeader = projectGroup.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.classList.remove('collapsed');
+                }
+            }
+
+            // Update UI - reset to script mode
+            const argsInput = document.getElementById('script-args').parentElement;
+            argsInput.style.display = 'block';
+            document.getElementById('run-btn').style.display = 'inline-block';
+            document.getElementById('debug-btn').style.display = 'inline-block';
+            
+            document.getElementById('no-selection').style.display = 'none';
+            showScriptDetails();
+            // Update script name and path
+            document.getElementById('script-name').textContent = selectedScript.name;
+            document.getElementById('script-path').textContent = selectedScript.path;
+            document.getElementById('script-args').value = '';
+            document.getElementById('output-content').textContent = 'No output yet. Click "Run Script" to execute.';
+            document.getElementById('output-content').className = 'output-content empty';
+            document.getElementById('status-badge').style.display = 'none';
+            document.getElementById('debug-btn').disabled = true;
+            lastOutput = null;
+            
+            // Display script arguments info if available
+            const argsInfoDiv = document.getElementById('script-arguments-info');
+            const descriptionDiv = document.getElementById('script-description');
+            const argsListDiv = document.getElementById('script-arguments-list');
+            
+            if (selectedScript.arguments_info) {
+                const info = selectedScript.arguments_info;
+                
+                // Show description
+                if (info.description) {
+                    descriptionDiv.innerHTML = `<p style="margin: 0; color: #555; line-height: 1.6;">${info.description}</p>`;
+                } else {
+                    descriptionDiv.innerHTML = '';
+                }
+                
+                // Show arguments
+                if (info.arguments && info.arguments.length > 0) {
+                    let argsHtml = '<h4 style="margin-top: 0; margin-bottom: 10px; color: #333;">Arguments:</h4>';
+                    argsHtml += '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                    
+                    info.arguments.forEach(arg => {
+                        const requiredBadge = arg.required ? '<span style="background: #dc3545; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-left: 5px;">Required</span>' : '<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-left: 5px;">Optional</span>';
+                        const defaultText = arg.default ? ` <span style="color: #666; font-size: 0.9em;">(default: ${arg.default})</span>` : '';
+                        
+                        argsHtml += `
+                            <div style="padding: 10px; background: white; border-radius: 4px; border-left: 3px solid #667eea;">
+                                <div style="font-weight: 600; color: #333; margin-bottom: 5px;">
+                                    <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace;">${arg.name}</code>
+                                    ${requiredBadge}
+                                    ${defaultText}
+                                </div>
+                                <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">${arg.description || 'No description provided.'}</div>
+                                ${arg.example ? `<div style="color: #888; font-size: 0.85em; font-family: 'Courier New', monospace;">Example: ${arg.example}</div>` : ''}
+                            </div>
+                        `;
+                    });
+                    
+                    argsHtml += '</div>';
+                    
+                    // Show requirements if available
+                    if (info.requirements && info.requirements.length > 0) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Requirements:</h4>';
+                        argsHtml += '<ul style="margin: 0; padding-left: 20px; color: #666;">';
+                        info.requirements.forEach(req => {
+                            argsHtml += `<li>${req}</li>`;
+                        });
+                        argsHtml += '</ul>';
+                    }
+                    
+                    // Show output description if available
+                    if (info.output) {
+                        argsHtml += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: #333;">Output:</h4>';
+                        argsHtml += `<p style="margin: 0; color: #666;">${info.output}</p>`;
+                    }
+                    
+                    argsListDiv.innerHTML = argsHtml;
+                } else {
+                    argsListDiv.innerHTML = '<p style="color: #999; font-style: italic;">No arguments defined for this script.</p>';
+                }
+                
+                argsInfoDiv.style.display = 'block';
+            } else {
+                argsInfoDiv.style.display = 'none';
+            }
+
+            // Update active state
+            renderScriptList();
+        }
+
+        function selectYamlFile(yamlId) {
+            // Find the YAML file
+            let yamlFile = null;
+            for (const project of projects) {
+                yamlFile = project.yaml_files.find(y => y.id === yamlId);
+                if (yamlFile) break;
+            }
+            
+            if (!yamlFile) return;
+
+            // Expand the project group if collapsed
+            const projectId = `project-${yamlFile.project.replace(/\s+/g, '-').toLowerCase()}`;
+            const projectGroup = document.getElementById(projectId);
+            if (projectGroup && projectGroup.classList.contains('collapsed')) {
+                projectGroup.classList.remove('collapsed');
+                const projectHeader = projectGroup.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.classList.remove('collapsed');
+                }
+            }
+
+            // Reset script selection
+            selectedScript = null;
+            lastOutput = null;
+
+            // Show YAML file info (read-only view)
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('script-details').style.display = 'block';
+            document.getElementById('script-name').textContent = `📄 ${yamlFile.name}`;
+            document.getElementById('script-path').textContent = yamlFile.relative_path;
+            
+            // Hide script execution controls for YAML files
+            const argsInput = document.getElementById('script-args').parentElement;
+            argsInput.style.display = 'none';
+            document.getElementById('run-btn').style.display = 'none';
+            document.getElementById('debug-btn').style.display = 'none';
+            
+            document.getElementById('output-content').textContent = 'YAML files are view-only. To view contents, open the file directly.';
+            document.getElementById('output-content').className = 'output-content empty';
+            document.getElementById('status-badge').style.display = 'none';
+            
+            renderScriptList();
+        }
+
+        let currentEventSource = null;
+        let currentScriptId = null;
+        let scriptOutputBuffer = '';
+        let currentReader = null; // Store the stream reader to cancel it
+
+        async function runScript() {
+            if (!selectedScript) {
+                showError('Please select a Python script to run.');
+                return;
+            }
+
+            // Close any existing event source
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+            }
+
+            const argsInput = document.getElementById('script-args').value.trim();
+            const args = argsInput ? argsInput.split(/\s+/) : [];
+
+            // Update UI
+            const runBtn = document.getElementById('run-btn');
+            const outputContent = document.getElementById('output-content');
+            const statusBadge = document.getElementById('status-badge');
+            runBtn.disabled = true;
+            runBtn.innerHTML = '<span class="loading"></span> Running...';
+            const stopBtn = document.getElementById('stop-btn');
+            stopBtn.style.display = 'inline-block';
+            stopBtn.disabled = false;
+            outputContent.className = 'output-content';
+            outputContent.textContent = 'Running script...\n';
+            statusBadge.style.display = 'inline-block';
+            statusBadge.className = 'status-badge running';
+            statusBadge.textContent = 'Running';
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('debug-btn').disabled = true;
+            scriptOutputBuffer = '';
+            currentScriptId = selectedScript.id;
+
+            try {
+                // Use fetch with streaming for Server-Sent Events
+                const response = await fetch(`${API_BASE}/scripts/${selectedScript.id}/run`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ args, stream: true })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                if (!response.body) {
+                    throw new Error('Response body is null');
+                }
+
+                const reader = response.body.getReader();
+                currentReader = reader; // Store for cancellation
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.trim() === '') continue;
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                handleStreamEvent(data, outputContent, statusBadge);
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e, 'Line:', line);
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                outputContent.textContent += `\n\nError: ${error.message}`;
+                statusBadge.className = 'status-badge error';
+                statusBadge.textContent = 'Error';
+                showError('Failed to run script: ' + error.message);
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = '▶ Run Script';
+                document.getElementById('stop-btn').style.display = 'none';
+                currentScriptId = null;
+                currentReader = null;
+            }
+        }
+
+        async function stopScript() {
+            if (!currentScriptId) {
+                showError('No script is currently running.');
+                return;
+            }
+
+            const stopBtn = document.getElementById('stop-btn');
+            stopBtn.disabled = true;
+            stopBtn.textContent = 'Stopping...';
+
+            // Cancel the stream reader if it exists
+            if (currentReader) {
+                try {
+                    await currentReader.cancel();
+                } catch (e) {
+                    console.error('Error canceling reader:', e);
+                }
+                currentReader = null;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/scripts/${currentScriptId}/stop`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const outputContent = document.getElementById('output-content');
+                    scriptOutputBuffer += '\n\n--- Script stopped by user ---\n';
+                    outputContent.textContent = scriptOutputBuffer;
+                    outputContent.scrollTop = outputContent.scrollHeight;
+                    
+                    const statusBadge = document.getElementById('status-badge');
+                    statusBadge.className = 'status-badge error';
+                    statusBadge.textContent = 'Stopped';
+                    
+                    // Store output for debug agent
+                    lastOutput = {
+                        success: false,
+                        stdout: scriptOutputBuffer,
+                        stderr: '',
+                        exit_code: -1,
+                        error: 'Script stopped by user',
+                        duration_seconds: result.duration || 0
+                    };
+                    
+                    document.getElementById('debug-btn').disabled = false;
+                } else {
+                    showError('Failed to stop script: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error stopping script: ' + error.message);
+            } finally {
+                stopBtn.disabled = false;
+                stopBtn.textContent = '⏹ Stop Script';
+                stopBtn.style.display = 'none';
+                currentScriptId = null;
+                currentReader = null;
+                document.getElementById('run-btn').disabled = false;
+                document.getElementById('run-btn').textContent = '▶ Run Script';
+            }
+        }
+
+        function handleStreamEvent(data, outputContent, statusBadge) {
+            switch (data.type) {
+                case 'start':
+                    outputContent.textContent = `Command: ${data.command}\n\n`;
+                    scriptOutputBuffer = '';
+                    break;
+                
+                case 'stdout':
+                    scriptOutputBuffer += data.line + '\n';
+                    outputContent.textContent = scriptOutputBuffer;
+                    outputContent.scrollTop = outputContent.scrollHeight;
+                    break;
+                
+                case 'stderr':
+                    scriptOutputBuffer += data.line + '\n';
+                    outputContent.textContent = scriptOutputBuffer;
+                    outputContent.scrollTop = outputContent.scrollHeight;
+                    break;
+                
+                case 'complete':
+                    // Store final output for debug agent
+                    lastOutput = {
+                        success: data.success,
+                        stdout: data.stdout || scriptOutputBuffer,
+                        stderr: data.stderr || '',
+                        exit_code: data.exit_code,
+                        error: data.success ? null : `Script exited with code ${data.exit_code}`,
+                        duration_seconds: data.duration
+                    };
+                    
+                    statusBadge.className = data.success ? 'status-badge success' : 'status-badge error';
+                    statusBadge.textContent = data.success ? 'Success' : 'Failed';
+                    document.getElementById('debug-btn').disabled = false;
+                    document.getElementById('stop-btn').style.display = 'none';
+                    break;
+                
+                case 'error':
+                    outputContent.textContent += `\n\nError: ${data.message}`;
+                    statusBadge.className = 'status-badge error';
+                    statusBadge.textContent = 'Error';
+                    document.getElementById('stop-btn').style.display = 'none';
+                    break;
+            }
+        }
+
+
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.style.display = 'block';
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+        }
+
+        async function callDebugAgent() {
+            if (!lastOutput) {
+                showError('No output to analyze. Please run a script first.');
+                return;
+            }
+
+            const debugBtn = document.getElementById('debug-btn');
+            const outputContent = document.getElementById('output-content');
+            const statusBadge = document.getElementById('status-badge');
+
+            debugBtn.disabled = true;
+            debugBtn.innerHTML = '<span class="loading"></span> Analyzing...';
+            outputContent.className = 'output-content';
+            outputContent.textContent = 'Calling debug agent to analyze script output...\n';
+            statusBadge.style.display = 'inline-block';
+            statusBadge.className = 'status-badge running';
+            statusBadge.textContent = 'Analyzing';
+
+            try {
+                const response = await fetch(`${API_BASE}/debug-agent`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        script_name: selectedScript.name,
+                        stdout: lastOutput.stdout || '',
+                        stderr: lastOutput.stderr || '',
+                        exit_code: lastOutput.exit_code || -1,
+                        error: lastOutput.error
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const analysis = result.analysis || 'No analysis provided.';
+                    outputContent.textContent = `Script Output:\n${'='.repeat(60)}\n${lastOutput.stdout || ''}\n${lastOutput.stderr ? '\nErrors:\n' + lastOutput.stderr : ''}\n\n${'='.repeat(60)}\n\nDebug Agent Analysis:\n${'='.repeat(60)}\n${analysis}`;
+                    statusBadge.className = 'status-badge success';
+                    statusBadge.textContent = 'Analysis Complete';
+                } else {
+                    outputContent.textContent = `Error: ${result.error || 'Unknown error'}`;
+                    statusBadge.className = 'status-badge error';
+                    statusBadge.textContent = 'Error';
+                    showError('Failed to call debug agent: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                outputContent.textContent = `Error: ${error.message}`;
+                statusBadge.className = 'status-badge error';
+                statusBadge.textContent = 'Error';
+                showError('Error calling debug agent: ' + error.message);
+            } finally {
+                debugBtn.disabled = false;
+                debugBtn.textContent = '🤖 Call Debug Agent';
+            }
+        }
+
+        // Load scripts on page load
+        loadScripts();
+    </script>
+</body>
+</html>
+

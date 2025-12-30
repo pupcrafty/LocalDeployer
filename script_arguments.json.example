@@ -1,0 +1,65 @@
+{
+  "scripts": [
+    {
+      "name": "deploy-stacks.py",
+      "description": "Deploys AWS CloudFormation stacks using the AWS CLI. This script handles stack creation and updates, managing the deployment lifecycle of infrastructure components.",
+      "arguments": [
+        {
+          "name": "--env",
+          "type": "string",
+          "required": true,
+          "description": "Environment name (e.g., 'production', 'staging', 'development')",
+          "example": "--env production"
+        },
+        {
+          "name": "--region",
+          "type": "string",
+          "required": false,
+          "description": "AWS region where stacks should be deployed",
+          "default": "us-east-1",
+          "example": "--region us-west-2"
+        },
+        {
+          "name": "--stack-name",
+          "type": "string",
+          "required": false,
+          "description": "Specific stack name to deploy. If not provided, deploys all stacks in the environment.",
+          "example": "--stack-name my-stack"
+        }
+      ],
+      "requirements": [
+        "AWS CLI must be configured with appropriate credentials",
+        "Python 3.8+",
+        "boto3 library installed"
+      ],
+      "output": "Prints deployment status, stack ARNs, and any errors encountered during deployment."
+    },
+    {
+      "name": "check-stacks-status.py",
+      "description": "Checks the status of deployed CloudFormation stacks and displays recent stack events. Useful for monitoring deployment progress and troubleshooting.",
+      "arguments": [
+        {
+          "name": "--env",
+          "type": "string",
+          "required": true,
+          "description": "Environment name to check stacks for",
+          "example": "--env production"
+        },
+        {
+          "name": "--stack-name",
+          "type": "string",
+          "required": false,
+          "description": "Specific stack name to check. If not provided, checks all stacks in the environment.",
+          "example": "--stack-name my-stack"
+        }
+      ],
+      "requirements": [
+        "AWS CLI configured",
+        "Python 3.8+",
+        "boto3 library installed"
+      ],
+      "output": "Displays stack status, creation time, last update time, and recent stack events."
+    }
+  ]
+}
+
